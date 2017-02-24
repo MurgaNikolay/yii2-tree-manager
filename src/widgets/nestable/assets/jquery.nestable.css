@@ -185,7 +185,7 @@
 
 .dd-edit-panel {
     display: none;
-    height: 63px;
+    /*height: 63px;*/
 }
 
 .dd-input-name,

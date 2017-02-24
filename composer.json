@@ -32,6 +32,7 @@
       "voskobovich\\tree\\manager\\actions\\": "src/actions",
       "voskobovich\\tree\\manager\\behaviors\\": "src/behaviors",
       "voskobovich\\tree\\manager\\forms\\": "src/forms",
+      "voskobovich\\tree\\manager\\lib\\": "src/lib",
       "voskobovich\\tree\\manager\\interfaces\\": "src/interfaces",
       "voskobovich\\tree\\manager\\widgets\\nestable\\": "src/widgets/nestable"
     }

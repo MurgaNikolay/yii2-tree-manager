@@ -15,16 +15,10 @@ use yii\db\ActiveRecord;
 class UpdateNodeAction extends BaseAction
 {
     /**
-     * Attribute for name in model
-     * @var string
-     */
-    public $nameAttribute = 'name';
-
-    /**
      * Move a node (model) below the parent and in between left and right
      *
      * @param integer $id the primaryKey of the moved node
-     * @return array
+     * @return bool
      * @throws InvalidConfigException
      * @throws Exception
      */
@@ -32,14 +26,8 @@ class UpdateNodeAction extends BaseAction
     {
         /** @var ActiveRecord|TreeInterface $model */
         $model = $this->findModel($id);
-
-        $name = Yii::$app->request->post('name');
-        $model->setAttribute($this->nameAttribute, $name);
-
-        if (!$model->validate()) {
-            return $model;
-        }
-
-        return $model->update(true, [$this->nameAttribute]);
+        $params = Yii::$app->request->getBodyParams();
+        $model->load($params);
+        return $model->save(true);
     }
 }

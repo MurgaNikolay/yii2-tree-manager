@@ -3,6 +3,7 @@
 namespace voskobovich\tree\manager\widgets\nestable;
 
 use voskobovich\tree\manager\interfaces\TreeInterface;
+use voskobovich\tree\manager\lib\MultiTreeTrait;
 use Yii;
 use yii\base\InvalidConfigException;
 use yii\base\Widget;
@@ -20,6 +21,8 @@ use yii\widgets\Pjax;
  */
 class Nestable extends Widget
 {
+
+    use MultiTreeTrait;
     /**
      * @var string
      */
@@ -34,6 +37,7 @@ class Nestable extends Widget
      * @var array
      */
     public $nameAttribute = 'name';
+
 
     /**
      * Behavior key in list all behaviors on model
@@ -83,6 +87,12 @@ class Nestable extends Widget
     public $formFieldsCallable;
 
     /**
+     * Handler for render form fields on create new node
+     * @var callable
+     */
+    public $shortFormFieldsCallable;
+
+    /**
      * Структура меню в php array формате
      * @var array
      */
@@ -107,58 +117,17 @@ class Nestable extends Widget
             throw new InvalidConfigException("No 'behaviorName' supplied on action initialization.");
         }
 
-        if (null == $this->advancedUpdateRoute && ($controller = Yii::$app->controller)) {
-            $this->advancedUpdateRoute = "{$controller->id}/update";
-        }
-
         if ($this->formFieldsCallable == null) {
             $this->formFieldsCallable = function ($form, $model) {
                 /** @var ActiveForm $form */
                 echo $form->field($model, $this->nameAttribute);
             };
         }
-
-        /** @var ActiveRecord|TreeInterface $model */
-        $model = $this->modelClass;
-
-        /** @var ActiveRecord[]|TreeInterface[] $rootNodes */
-        $rootNodes = $model::find()->roots()->all();
-
-        if (!empty($rootNodes[0])) {
-            /** @var ActiveRecord|TreeInterface $items */
-            $items = $rootNodes[0]->populateTree();
-            $this->_items = $this->prepareItems($items);
+        if ($this->shortFormFieldsCallable === null) {
+            $this->shortFormFieldsCallable = $this->formFieldsCallable;
         }
     }
 
-    /**
-     * @param ActiveRecord|TreeInterface $node
-     * @return array
-     */
-    protected function getNode($node)
-    {
-        $items = [];
-        /** @var ActiveRecord[]|TreeInterface[] $children */
-        $children = $node->children;
-
-        foreach ($children as $n => $node) {
-            $items[$n]['id'] = $node->getPrimaryKey();
-            $items[$n]['name'] = $node->getAttribute($this->nameAttribute);
-            $items[$n]['children'] = $this->getNode($node);
-            $items[$n]['update-url'] = Url::to([$this->advancedUpdateRoute, 'id' => $node->getPrimaryKey()]);
-        }
-
-        return $items;
-    }
-
-    /**
-     * @param ActiveRecord|TreeInterface[] $node
-     * @return array
-     */
-    private function prepareItems($node)
-    {
-        return $this->getNode($node);
-    }
 
     /**
      * @param null $name
@@ -187,7 +156,7 @@ class Nestable extends Widget
             'id' => $this->id . '-pjax'
         ]);
         $this->registerPluginAssets();
-        $this->renderMenu();
+        $this->renderTree();
         $this->renderForm();
         Pjax::end();
 
@@ -214,7 +183,8 @@ class Nestable extends Widget
                     data: $(this).serialize()
                 }).success(function (data, textStatus, jqXHR) {
                     $('#{$this->id}-new-node-modal').modal('hide')
-                    $.pjax.reload({container: '#{$this->id}-pjax'});
+                    window.location.reload();
+                    //$.pjax.reload({container: '#{$this->id}-pjax'});
                     window.scrollTo(0, document.body.scrollHeight);
                 }).fail(function (jqXHR) {
                     alert(jqXHR.responseText);
@@ -332,14 +302,17 @@ class Nestable extends Widget
     /**
      * Вывод меню
      */
-    private function renderMenu()
+    private function renderTree()
     {
+        $root = $this->getRoot();
+
         echo Html::beginTag('div', ['class' => 'dd-nestable', 'id' => $this->id]);
-
-        $this->printLevel($this->_items);
-
+        if ($root) {
+            $this->renderNodes($this->getRoot()->children);
+        }
         echo Html::endTag('div');
     }
+
 
     /**
      * Render form for new node
@@ -348,7 +321,9 @@ class Nestable extends Widget
     {
         /** @var ActiveRecord $model */
         $model = new $this->modelClass;
-
+        if ($this->treeAttribute) {
+            $model->{$this->treeAttribute} = $this->treeId;
+        }
         echo <<<HTML
 <div class="modal" id="{$this->id}-new-node-modal" tabindex="-1" role="dialog" aria-labelledby="newNodeModalLabel">
   <div class="modal-dialog" role="document">
@@ -356,7 +331,7 @@ class Nestable extends Widget
 HTML;
         /** @var ActiveForm $form */
         $form = ActiveForm::begin([
-            'id' => $this->id . '-new-node-form'
+            'id' => $this->id . '-new-node-form',
         ]);
 
         echo <<<HTML
@@ -368,6 +343,9 @@ HTML;
 HTML;
 
         echo call_user_func($this->formFieldsCallable, $form, $model);
+        if ($this->treeAttribute) {
+            echo $form->field($model, $this->treeAttribute)->hiddenInput()->label(false);
+        }
 
         echo <<<HTML
       </div>
@@ -388,56 +366,73 @@ HTML;
      * Распечатка одного уровня
      * @param $level
      */
-    private function printLevel($level)
+    private function renderNodes($nodes)
     {
         echo Html::beginTag('ol', ['class' => 'dd-list']);
-
-        foreach ($level as $item) {
-            $this->printItem($item);
+        foreach ($nodes as $node) {
+            $this->renderNode($node);
         }
 
         echo Html::endTag('ol');
     }
 
     /**
-     * Распечатка одного пункта
-     * @param $item
+     * Print one line
+     * @param ActiveRecord|TreeInterface $node
      */
-    private function printItem($item)
+    private function renderNode($node)
     {
         $htmlOptions = ['class' => 'dd-item'];
-        $htmlOptions['data-id'] = !empty($item['id']) ? $item['id'] : '';
+        $htmlOptions['data-id'] = $node->getPrimaryKey();
 
         echo Html::beginTag('li', $htmlOptions);
 
         echo Html::tag('div', '', ['class' => 'dd-handle']);
-        echo Html::tag('div', $item['name'], ['class' => 'dd-content']);
+        echo Html::tag('div', $node->{$this->nameAttribute}, ['class' => 'dd-content']);
 
         echo Html::beginTag('div', ['class' => 'dd-edit-panel']);
-        echo Html::input('text', null, $item['name'],
-            ['class' => 'dd-input-name', 'placeholder' => $this->getPlaceholderForName()]);
+
+        if ($this->shortFormFieldsCallable) {
+            $form = ActiveForm::begin([
+                'id' => $node->getPrimaryKey() . '-update-node-form',
+                'options' => [
+                    'class' => 'dd-edit-form'
+                ]
+            ]);
+            echo call_user_func($this->shortFormFieldsCallable, $form, $node);
+        }
 
         echo Html::beginTag('div', ['class' => 'btn-group']);
-        echo Html::button(Yii::t('vendor/voskobovich/yii2-tree-manager/widgets/nestable', 'Save'), [
-            'data-action' => 'save',
-            'class' => 'btn btn-success btn-sm',
-        ]);
-        echo Html::a(Yii::t('vendor/voskobovich/yii2-tree-manager/widgets/nestable', 'Advanced editing'),
-            $item['update-url'], [
-                'data-action' => 'advanced-editing',
-                'class' => 'btn btn-default btn-sm',
-                'target' => '_blank'
-            ]);
+
+        if ($this->advancedUpdateRoute) {
+            echo Html::a(Yii::t('vendor/voskobovich/yii2-tree-manager/widgets/nestable', 'Advanced editing'),
+                Url::to([$this->advancedUpdateRoute, 'id' => $node->getPrimaryKey()]), [
+                    'data-action' => 'advanced-editing',
+                    'data-pjax' => false,
+                    'class' => 'btn btn-default btn-sm',
+                    'target' => '_blank'
+                ]);
+        }
+
         echo Html::button(Yii::t('vendor/voskobovich/yii2-tree-manager/widgets/nestable', 'Delete'), [
             'data-action' => 'delete',
             'class' => 'btn btn-danger btn-sm'
         ]);
-        echo Html::endTag('div');
+
+        if ($this->shortFormFieldsCallable && isset($form)) {
+            echo Html::button(Yii::t('vendor/voskobovich/yii2-tree-manager/widgets/nestable', 'Save'), [
+                'data-action' => 'save',
+                'class' => 'btn btn-success btn-sm',
+            ]);
+            $form->end();
+        }
 
         echo Html::endTag('div');
 
-        if (isset($item['children']) && count($item['children'])) {
-            $this->printLevel($item['children']);
+        echo Html::endTag('div');
+
+        if ($node->children) {
+            $this->renderNodes($node->children);
         }
 
         echo Html::endTag('li');

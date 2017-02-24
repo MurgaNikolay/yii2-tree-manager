@@ -3,7 +3,7 @@
  * Dual-licensed under the BSD or MIT licenses
  */
 ;
-(function ($, window, document, undefined) {
+(function($, window, document, undefined) {
     var hasTouch = 'ontouchstart' in window;
 
     /**
@@ -11,7 +11,7 @@
      * events are normally disabled on the dragging element to avoid conflicts
      * https://github.com/ausi/Feature-detection-technique-for-pointer-events/blob/master/modernizr-pointerevents.js
      */
-    var hasPointerEvents = (function () {
+    var hasPointerEvents = (function() {
         var el = document.createElement('div'),
             docEl = document.documentElement;
         if (!('pointerEvents' in el.style)) {
@@ -47,6 +47,7 @@
         noDragClass: 'dd-nodrag',
         emptyClass: 'dd-empty',
         btnGroupClass: 'btn-group',
+        editFormClass: 'dd-edit-form',
         expandBtnHTML: '<button data-action="expand" class="dd-button" type="button"></button>',
         collapseBtnHTML: '<button data-action="collapse" class="dd-button" type="button"></button>',
         group: 0,
@@ -69,7 +70,7 @@
 
     Plugin.prototype = {
 
-        init: function () {
+        init: function() {
             var tree = this;
 
             tree.reset();
@@ -78,7 +79,7 @@
 
             tree.placeEl = $('<div class="' + tree.options.placeClass + '"/>');
 
-            $.each(this.el.find(tree.options.itemNodeName), function (k, el) {
+            $.each(this.el.find(tree.options.itemNodeName), function(k, el) {
                 // Вставляем иконки открытия\закрытия дочек
                 tree.setParent($(el));
             });
@@ -87,7 +88,7 @@
             tree.setPanelEvents(tree.el);
             tree.setActionButtonsEvents(tree.el);
 
-            tree.el.on('click', 'button', function (e) {
+            tree.el.on('click', 'button', function(e) {
                 if (tree.dragEl || (!hasTouch && e.button !== 0)) {
                     return;
                 }
@@ -102,7 +103,7 @@
                 }
             });
 
-            var onStartEvent = function (e) {
+            var onStartEvent = function(e) {
                 var handle = $(e.target);
                 if (!handle.hasClass(tree.options.handleClass)) {
                     if (handle.closest('.' + tree.options.noDragClass).length) {
@@ -117,14 +118,14 @@
                 tree.dragStart(hasTouch ? e.touches[0] : e);
             };
 
-            var onMoveEvent = function (e) {
+            var onMoveEvent = function(e) {
                 if (tree.dragEl) {
                     e.preventDefault();
                     tree.dragMove(hasTouch ? e.touches[0] : e);
                 }
             };
 
-            var onEndEvent = function (e) {
+            var onEndEvent = function(e) {
                 if (tree.dragEl) {
                     e.preventDefault();
                     tree.dragStop(hasTouch ? e.touches[0] : e);
@@ -147,18 +148,16 @@
          * Вешаем onClick на тело пункта
          * @returns {*}
          */
-        setPanelEvents: function (el) {
+        setPanelEvents: function(el) {
             var tree = this;
-
-            el.on('keyup', '.' + tree.options.inputNameClass, function (e) {
+            el.on('keyup.nestable', '.' + tree.options.inputNameClass, function(e) {
                 var target = $(e.target),
                     li = target.closest('.' + tree.options.itemClass),
                     content = li.children('.' + tree.options.contentClass);
-
                 content.html(target.val());
             });
 
-            el.on('click', '.' + tree.options.contentClass, function (e) {
+            el.on('click.nestable', '.' + tree.options.contentClass, function(e) {
                 var owner = $(e.target).parent();
                 var editPanel = owner.children('.' + tree.options.editPanelClass);
 
@@ -168,11 +167,18 @@
                         .removeClass(tree.options.inputOpenClass);
 
                     editPanel.addClass(tree.options.inputOpenClass);
-                    editPanel.slideDown(100);
+                    editPanel.slideDown(100, function() {
+                        editPanel.trigger('opened.nestable');
+                        editPanel.find('.' + tree.options.editFormClass).trigger('opened.nestable')
+                    });
+
                 }
                 else {
                     editPanel.removeClass(tree.options.inputOpenClass);
-                    editPanel.slideUp(100);
+                    editPanel.slideUp(100, function() {
+                        editPanel.trigger('opened.nestable');
+                        editPanel.find('.' + tree.options.editFormClass).trigger('closed.nestable')
+                    });
                 }
             });
         },
@@ -181,17 +187,17 @@
          * Вешаем onClick на кнопки управления нодой
          * @returns {*}
          */
-        setActionButtonsEvents: function (el) {
+        setActionButtonsEvents: function(el) {
             var tree = this;
 
-            el.on('click', '.' + tree.options.btnGroupClass + ' [data-action="save"]', function (e) {
+            el.on('click', '.' + tree.options.btnGroupClass + ' [data-action="save"]', function(e) {
                 var target = $(e.target),
                     li = target.closest('.' + tree.options.itemClass);
 
                 tree.updateNodeRequest(li);
             });
 
-            el.on('click', '.' + tree.options.btnGroupClass + ' [data-action="delete"]', function (e) {
+            el.on('click', '.' + tree.options.btnGroupClass + ' [data-action="delete"]', function(e) {
                 var target = $(e.target),
                     li = target.closest('.' + tree.options.itemClass);
 
@@ -201,7 +207,7 @@
             });
         },
 
-        reset: function () {
+        reset: function() {
             this.mouse = {
                 offsetX: 0,
                 offsetY: 0,
@@ -229,14 +235,14 @@
             this.pointEl = null;
         },
 
-        expandItem: function (li) {
+        expandItem: function(li) {
             li.removeClass(this.options.collapsedClass);
             li.children('[data-action="expand"]').hide();
             li.children('[data-action="collapse"]').show();
             li.children(this.options.listNodeName).show();
         },
 
-        collapseItem: function (li) {
+        collapseItem: function(li) {
             var lists = li.children(this.options.listNodeName);
             if (lists.length) {
                 li.addClass(this.options.collapsedClass);
@@ -246,21 +252,21 @@
             }
         },
 
-        expandAll: function () {
+        expandAll: function() {
             var tree = this;
-            tree.el.find(tree.options.itemNodeName).each(function () {
+            tree.el.find(tree.options.itemNodeName).each(function() {
                 tree.expandItem($(this));
             });
         },
 
-        collapseAll: function () {
+        collapseAll: function() {
             var tree = this;
-            tree.el.find(tree.options.itemNodeName).each(function () {
+            tree.el.find(tree.options.itemNodeName).each(function() {
                 tree.collapseItem($(this));
             });
         },
 
-        setParent: function (li) {
+        setParent: function(li) {
             if (li.children(this.options.listNodeName).length) {
                 li.prepend($(this.options.expandBtnHTML));
                 li.prepend($(this.options.collapseBtnHTML));
@@ -268,13 +274,13 @@
             li.children('[data-action="expand"]').hide();
         },
 
-        unsetParent: function (li) {
+        unsetParent: function(li) {
             li.removeClass(this.options.collapsedClass);
             li.children('[data-action]').remove();
             li.children(this.options.listNodeName).remove();
         },
 
-        dragStart: function (e) {
+        dragStart: function(e) {
             var mouse = this.mouse,
                 target = $(e.target),
                 dragItem = target.closest(this.options.itemNodeName);
@@ -313,7 +319,7 @@
             }
         },
 
-        dragStop: function (e) {
+        dragStop: function(e) {
             // fix for zepto.js
             //this.placeEl.replaceWith(this.dragEl.children(this.options.itemNodeName + ':first').detach());
             var el = this.dragEl.children(this.options.itemNodeName).first();
@@ -335,7 +341,7 @@
          * Save new node position on server
          * @param el
          */
-        moveNodeRequest: function (el) {
+        moveNodeRequest: function(el) {
             var tree = this;
             var id = el.data('id');
             if (typeof id === "undefined" || !id) {
@@ -355,14 +361,14 @@
                     prev_id: (prev.length ? prev.data('id') : 0),
                     next_id: (next.length ? next.data('id') : 0)
                 }
-            }).success(function () {
+            }).success(function() {
                 $.pjax.reload({container: '#' + tree.el.attr('id') + '-pjax'});
-            }).fail(function (jqXHR) {
+            }).fail(function(jqXHR) {
                 alert(jqXHR.responseText);
             });
         },
 
-        deleteNodeRequest: function (el) {
+        deleteNodeRequest: function(el) {
             var tree = this;
             var id = el.data('id');
             if (typeof id === "undefined" || !id) {
@@ -373,40 +379,37 @@
                 url: this.options.deleteUrl + '?id=' + id,
                 method: 'POST',
                 context: document.body
-            }).success(function (data, textStatus, jqXHR) {
+            }).success(function(data, textStatus, jqXHR) {
                 $.pjax.reload({container: '#' + tree.el.attr('id') + '-pjax'});
-            }).fail(function (jqXHR) {
+            }).fail(function(jqXHR) {
                 alert(jqXHR.responseText);
             });
         },
 
-        updateNodeRequest: function (el) {
+        updateNodeRequest: function(el) {
             var tree = this,
                 id = el.data('id');
 
             if (typeof id === "undefined" || !id) {
                 return false;
             }
-
-            var name = el.find('.' + this.options.inputNameClass);
+            var form = el.find('form.' + this.options.editFormClass);
 
             $.ajax({
                 url: this.options.updateUrl + '?id=' + id,
                 method: 'POST',
                 context: document.body,
-                data: {
-                    name: name.val()
-                }
-            }).success(function (data, textStatus, jqXHR) {
+                data: form.serialize()
+            }).success(function(data, textStatus, jqXHR) {
                 var editPanel = el.children('.' + tree.options.editPanelClass);
                 editPanel.removeClass(tree.options.inputOpenClass);
                 editPanel.slideUp(100);
-            }).fail(function (jqXHR) {
+            }).fail(function(jqXHR) {
                 alert(jqXHR.responseText);
             });
         },
 
-        dragMove: function (e) {
+        dragMove: function(e) {
             var tree, parent, prev, next, depth,
                 opt = this.options,
                 mouse = this.mouse;
@@ -565,11 +568,11 @@
 
     };
 
-    $.fn.nestable = function (params) {
+    $.fn.nestable = function(params) {
         var lists = this,
             retval = this;
 
-        lists.each(function () {
+        lists.each(function() {
             var plugin = $(this).data("nestable");
 
             if (!plugin) {

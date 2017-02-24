@@ -2,6 +2,7 @@
 
 namespace voskobovich\tree\manager\actions;
 
+use voskobovich\tree\manager\lib\MultiTreeTrait;
 use Yii;
 use voskobovich\tree\manager\interfaces\TreeInterface;
 use yii\db\ActiveRecord;
@@ -13,6 +14,7 @@ use yii\web\HttpException;
  */
 class CreateNodeAction extends BaseAction
 {
+    use MultiTreeTrait;
     /**
      * @return null
      * @throws HttpException
@@ -29,12 +31,16 @@ class CreateNodeAction extends BaseAction
             return $model;
         }
 
-        $roots = $model::find()->roots()->all();
-
-        if (isset($roots[0])) {
-            return $model->appendTo($roots[0])->save();
-        } else {
-            return $model->makeRoot()->save();
+        if ($this->treeAttribute) {
+            $this->treeId = $model->{$this->treeAttribute};
         }
+        $root = $this->getRoot();
+        if (!$root){
+            // Use current node as prototype
+            $root = clone $model;
+            $root->makeRoot()->save();
+        }
+
+        return $model->appendTo($root)->save();
     }
 }
